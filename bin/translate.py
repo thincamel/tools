@@ -4,6 +4,7 @@
 
 import requests
 import urllib
+import sys
 
 
 class Trans(object):
@@ -19,20 +20,27 @@ class Trans(object):
     def trans(self):
 
         # print self.request_url
-        r = requests.get(self.request_url)
+        try:
+            r = requests.get(self.request_url)
+        except:
+            sys.stderr.write("请求API失败\n")
+            sys.exit(1)
         if r.status_code != 200:
-            return None
+            sys.stderr.write("请求API失败,状态码不为200\n")
+            sys.exit(1)
         try:
             json_result = r.json()
         except:
-            return None
+            sys.stderr.write("转换json失败\n")
+            sys.exit(1)
 
         return '|'.join(json_result['translation'])
 
 
 if __name__ == "__main__":
 
-    t = Trans("hello,world")
+    keyword = ' '.join(sys.argv[1:])
+    t = Trans(keyword)
     print t.trans()
 
 
