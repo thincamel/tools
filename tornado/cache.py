@@ -1,5 +1,9 @@
 #coding:utf-8
 
+###
+### cache请求的html
+###
+
 from tornado.web import RequestHandler
 import redis
 

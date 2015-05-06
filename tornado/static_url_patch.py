@@ -2,6 +2,10 @@
 import tornado
 import re
 
+##
+## hack tornado template
+## replace '/static/xxx' to  'http://xxx.com/static/xxx'
+##
 
 def static_url_patch(domain):
 
