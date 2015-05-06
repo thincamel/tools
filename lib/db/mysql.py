@@ -12,24 +12,53 @@ mysql_config = {
 
 class DB(object):
 
-    def __init__(self, db_name, conn=None, *args, **kwargs):
+    def __init__(self, db_name, conn=None, trans=False, auto_close_conn=True, *args, **kwargs):
         self.db_name = db_name
         super(DB, self).__init__()
 
         self.conn = conn
-        self.auto_close_conn = False
+        self.auto_create_conn = False
+        self._trans_end = False
+        self._trans = trans
+        if self._trans is False:
+            self._trans_end = True
+        self.auto_close_conn = auto_close_conn
 
-        return
         if conn is None:
+            self.auto_create_conn = True
 
-            self.conn = DB.get_conn(db_name)
-            self.auto_close_conn = True
+    def end_trans(self):
+
+        self._trans_end = True
+        with self:
+            # commit trans and close conn
+            pass
+
+    def __enter__(self):
+
+        if self.auto_create_conn is True and self.conn is None:
+            self.conn = DB.get_conn(self.db_name)
 
         self.cur = self.conn.cursor()
 
-    def __enter__(self):
-        print 123
-        return 123
+    def __exit__(self, exc, value, tb):
+
+        self.cur.close()
+        if exc:
+            self.conn.rollback()
+            if self.auto_close_conn:
+                self.close_conn()
+        else:
+            if self._trans_end is True:
+                self.conn.commit()
+                if self.auto_close_conn:
+                    self.close_conn()
+
+
+    def close_conn(self):
+
+        self.conn.close()
+        self.conn = None
 
     def test_with_ok(self):
 
@@ -40,13 +69,6 @@ class DB(object):
         with self:
             print 'i am wrong'
             assert 1==2
-
-    def __exit__(self, exc, value, tb):
-        if exc:
-            print 'error'
-        else:
-            print 'ok'
-        print self
 
     @staticmethod
     def get_conn(db_name):
@@ -75,9 +97,10 @@ class DB(object):
             print "sql:", sql
             print "args:", args
 
-        self.cur.execute(sql, args=args)
-        last_id = int(self.conn.insert_id())
-        return last_id
+        with self:
+            self.cur.execute(sql, args=args)
+            last_id = int(self.conn.insert_id())
+            return last_id
 
     def update(self, table_name, query_dict, update_dict, print_sql=False, sql_row_count=0):
 
@@ -89,9 +112,10 @@ class DB(object):
             print "sql:", sql
             print "args:", args
 
-        row_count = self.cur.execute(sql, args=args)
-        if sql_row_count:
-            assert row_count == sql_row_count
+        with self:
+            row_count = self.cur.execute(sql, args=args)
+            if sql_row_count:
+                assert row_count == sql_row_count
         return row_count
 
     def delete(self, table_name, query_dict, print_sql=False, sql_row_count=0):
@@ -103,14 +127,10 @@ class DB(object):
             print "sql:", sql
             print "args:", args
 
-        if self.conn is None:
-            self.db.dbName = self.db_name
-            row_count = self.db.execUpdate(sql, args=args)
-        else:
+        with self:
             row_count = self.cur.execute(sql, args=args)
-
-        if sql_row_count:
-            assert sql_row_count == row_count
+            if sql_row_count:
+                assert sql_row_count == row_count
 
         return row_count
 
@@ -129,11 +149,11 @@ class DB(object):
             print "sql:", sql
             print "args:", args
 
-        self.cur = self.conn.cursor(MySQLdb.cursors.DictCursor)
-        self.cur.execute(sql, args=args)
-        result = self.cur.fetchall()
-
-        return result
+        with self:
+            self.cur = self.conn.cursor(MySQLdb.cursors.DictCursor)
+            self.cur.execute(sql, args=args)
+            result = self.cur.fetchall()
+            return result
 
     @staticmethod
     def gen_sql_query(query_dict):
@@ -189,115 +209,55 @@ class autoTestCase(unittest.TestCase):
 
         print '*****************test begin*******************'
 
-        self.sql_base = DB('billing_record_db')
-
     def tearDown(self):
         print "*******************test done*******************"
 
-
-    def testquery1(self):
-
-        query_dict = {
-            "phone": '18603036769',
-            "phone__in": ('18603036769','18823331333') ,
-        }
-
-        fields = ['phone']
-
-        result = self.sql_base.query('xh_user', query_dict=query_dict, print_sql=True, fields=fields)
-        print result
-        self.assertEqual(len(result), 1)
-
-    def testquery2(self):
+    def init_db(self):
 
         query_dict = {
-            "phone__like": '18603036769%',
-        }
-        fields = ['count(*) as count']
-        result = self.sql_base.query('xh_user', query_dict=query_dict, print_sql=True, fields=fields, page=0)
-        print result
-
-    def testInsert(self):
-
-        obj_dict = {
-            "phone": "17777777777",
+            "uid__in": (1, 2)
         }
 
-        last_id = self.sql_base.insert('xh_user', obj_dict, print_sql=True)
-        print last_id
+        mysqldb = DB("db_for_test")
+        mysqldb.delete('user', query_dict=query_dict)
 
-    def testReplace(self):
+    def insert_success(self):
 
-        obj_dict = {
-            "phone": "17777777777",
-            }
-        last_id = self.sql_base.insert('xh_user', obj_dict, print_sql=True, mode='replace')
-        print last_id
+        mysqldb = DB("db_for_test", trans=True)
+        mysqldb.insert('user', obj_dict={"uid": 1})
+        mysqldb.insert('user', obj_dict={"uid": 2})
+        mysqldb.end_trans()
 
-    def testInsertOrUpdate(self):
+    def insert_success_ok(self):
 
-        obj_dict = {
-            "phone": "17777777777",
-            "balance": "23333333333",
-            }
-        last_id = self.sql_base.insert('xh_user', obj_dict, print_sql=True, mode='insert_or_update')
-        print last_id
+        mysqldb = DB("db_for_test")
+        result = mysqldb.query('user', query_dict={"uid": 1})
+        assert len(result) == 1
 
-    def testUpdate(self):
+    def insert_fail(self):
 
-        query_dict = {
-            "phone": '18603036769',
-        }
-        update_dict = {
-            "balance": 12345,
-            "is_vip": 4,
-        }
+        mysqldb = DB("db_for_test", trans=True)
+        mysqldb.insert('user', obj_dict={"uid": 1})
+        mysqldb.insert('user', obj_dict={"uid": 3})
 
-        row_count = self.sql_base.update('xh_user', query_dict=query_dict,update_dict=update_dict,print_sql=True, sql_row_count=1)
-        print "update row_count", row_count
+    def insert_success_fail(self):
 
-    def testdelete(self):
+        mysqldb = DB("db_for_test")
+        result = mysqldb.query('user', query_dict={"uid": 3})
+        assert len(result) == 0
 
-        query_dict = {
-            "phone": "17777777778",
-            "is_vip": '0',
-        }
-        row_count = self.sql_base.delete('xh_user', query_dict=query_dict, print_sql=True)
-        print "delete row_count", row_count
+    def testdb(self):
 
-
-    def testTrans(self):
-
-        print "test trans"
-        _conn = DB.getConn('billing_record_db')
-        with _conn:
-
-            su = DB('billing_record_db', conn=_conn)
-            su.insert("xh_user", obj_dict={"phone": 18099899995})
-            print su.query('xh_user', query_dict={"phone": 18603036769})
-            su.update("xh_user", query_dict={"phone": '18603036769', 'uid': 100333}, update_dict={"balance": 100}, sql_row_count=1)
-
-
-class Test(object):
-
-    def __enter__(self):
-        print 123
-        return 123
-
-    def __exit__(self, exc, value, tb):
-        if exc:
-            print 'error'
-        else:
-            print 'ok'
-        print self
-
+        self.init_db()
+        self.insert_success()
+        self.insert_success_ok()
+        try:
+            self.insert_fail()
+        except:
+            pass
+        self.insert_success_fail()
 
 if __name__ == "__main__":
 
-    # unittest.main()
-
-    test = DB('123')
-    test.test_with_ok()
-    test.test_with_error()
-
+    unittest.main()
 
