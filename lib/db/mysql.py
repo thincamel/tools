@@ -7,6 +7,7 @@ mysql_config = {
     "host": "127.0.0.1",
     "passwd": "",
     "charset": "utf8",
+    "user": "root",
 }
 
 
@@ -73,7 +74,7 @@ class DB(object):
     @staticmethod
     def get_conn(db_name):
 
-        conn = MySQLdb.connect(user='root', db=db_name, **mysql_config)
+        conn = MySQLdb.connect(db=db_name, **mysql_config)
         return conn
 
     def insert(self, table_name, obj_dict, mode='insert', print_sql=False):
