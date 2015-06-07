@@ -1,6 +1,8 @@
+#!/usr/bin/env python
 #coding:utf-8
 
 
+# 百度ocr服务：http://apistore.baidu.com/apiworks/servicedetail/146.html
 import os
 import requests
 import base64
@@ -28,7 +30,8 @@ def ocr_trans(f):
     data['detecttype'] = "LocateRecognize"
     data['languagetype'] = "CHN_ENG"
     data['imagetype'] = 2
-    r = requests.post(api_url,headers=headers, data=data, files={"image": f})
+    # 233333,百度用文件名来判断是否是jpg文件,全部指定为xx.jpg.
+    r = requests.post(api_url,headers=headers, data=data, files={"image": ('xx.jpg', f)})
     result = r.json()
     if str(result['errNum']) != '0':
         print result['errMsg']
@@ -45,8 +48,7 @@ if __name__ == "__main__":
     arg = sys.argv[1]
     if arg.startswith('http://') or arg.startswith('https://'):
         r = requests.get(arg)
-        arg = '/tmp/ocr.jpg'
-        with open(arg, 'wb') as f:
-            f.write(r.content)
-    with open(arg,'rb') as f:
-        print ocr_trans(f)
+        print ocr_trans(r.content)
+    else:
+        with open(arg,'rb') as f:
+            print ocr_trans(f)
