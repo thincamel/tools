@@ -6,10 +6,6 @@
 import os
 import requests
 import base64
-try:
-    import cStringIO as StringIO
-except ImportError:
-    import StringIO
 
 api_url = "http://apis.baidu.com/apistore/idlocr/ocr"
 api_key = os.getenv("BAIDU_API_KEY")
